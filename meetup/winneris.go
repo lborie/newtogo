@@ -9,10 +9,13 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+    "google.golang.org/appengine"
+    "google.golang.org/appengine/urlfetch"
 )
 
 // query the query URL
-var query string = "https://api.meetup.com/GDG-Lille/events/236825262/rsvps?key=%s&sign=true&photo-host=public"
+var query string = "https://api.meetup.com/GDG-Lille/events/237685658/rsvps?key=%s&sign=true&photo-host=public"
 
 // RSVP strucutre
 type RSVP struct {
@@ -38,44 +41,46 @@ type Winner struct {
 }
 
 // main
-func main() {
-	// new http client
-	hc := &http.Client{}
+func init() {
 
-	// get secret API KEY
-	key := os.Getenv("MEETUP_APIKEY")
-
-	// retrieve participant liste
-	response, err := hc.Get(fmt.Sprintf(query, key))
-	if err != nil {
-		panic(err)
-		return
-	}
-
-	// decode response
-	rsvpArray := make(RSVPArray, 0)
-	err = json.NewDecoder(response.Body).Decode(&rsvpArray)
-
-	if err != nil {
-		panic(err)
-		return
-	}
-
-	// filter ok and not organizer
-	rsvpArrayOk := make(RSVPArray, 0)
-	for _, rsvp := range rsvpArray {
-
-		if "yes" == strings.ToLower(rsvp.Response) &&
-			!rsvp.Member.Context.Host {
-			rsvpArrayOk = append(rsvpArrayOk, rsvp)
-		}
-	}
-
-	// print result count
-	fmt.Printf("Members %d\n", len(rsvpArrayOk))
 
 	// build http server to display the random winner
-	http.HandleFunc("/index.html", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+
+		ctx := appengine.NewContext(r)
+		hc := urlfetch.Client(ctx)
+
+			// get secret API KEY
+		key := os.Getenv("API_KEY")
+
+		// retrieve participant liste
+		response, err := hc.Get(fmt.Sprintf(query, key))
+		if err != nil {
+			panic(err)
+			return
+		}
+
+		// decode response
+		rsvpArray := make(RSVPArray, 0)
+		err = json.NewDecoder(response.Body).Decode(&rsvpArray)
+
+		if err != nil {
+			panic(err)
+			return
+		}
+
+		// filter ok and not organizer
+		rsvpArrayOk := make(RSVPArray, 0)
+		for _, rsvp := range rsvpArray {
+
+			if "yes" == strings.ToLower(rsvp.Response) &&
+				!rsvp.Member.Context.Host {
+				rsvpArrayOk = append(rsvpArrayOk, rsvp)
+			}
+		}
+
+		// print result count
+		fmt.Printf("Members %d\n", len(rsvpArrayOk))
 
 		t, err := template.ParseFiles("index.html")
 
@@ -102,13 +107,4 @@ func main() {
 			panic(err)
 		}
 	})
-
-	http.Handle("/", http.FileServer(http.Dir(".")))
-
-	// serve content
-	err = http.ListenAndServe(":3000", nil)
-	if err != nil {
-		panic(err)
-	}
-
 }
